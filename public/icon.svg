@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-label="Waklum">
+  <defs>
+    <linearGradient id="wk-face" x1="36" y1="24" x2="220" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="55%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="wk-bevel" x1="128" y1="16" x2="128" y2="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.18"/>
+    </linearGradient>
+    <radialGradient id="wk-dish" cx="128" cy="104" r="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="128" cy="128" r="120" fill="url(#wk-face)"/>
+  <circle cx="128" cy="128" r="120" fill="url(#wk-bevel)"/>
+  <g transform="rotate(-90 128 128)">
+    <circle cx="128" cy="128" r="104" fill="none" stroke="#ffffff" stroke-opacity="0.55"
+            stroke-width="11" stroke-linecap="round" stroke-dasharray="9 18.227"/>
+  </g>
+  <circle cx="128" cy="128" r="86" fill="#ffffff" fill-opacity="0.10"/>
+  <circle cx="128" cy="128" r="86" fill="url(#wk-dish)"/>
+  <circle cx="128" cy="128" r="86" fill="none" stroke="#ffffff" stroke-opacity="0.30" stroke-width="3"/>
+  <g transform="rotate(-90 128 128)">
+    <circle cx="128" cy="128" r="74" fill="none" stroke="#ffffff" stroke-opacity="0.38"
+            stroke-width="6" stroke-linecap="round" stroke-dasharray="5 53.119"/>
+  </g>
+  <path d="M128 8 l11 19 h-22 z" fill="#ffffff" fill-opacity="0.92"/>
+  <path d="M80 92 l16 54 15.5-41 h13 l15.5 41 16-54 h17.5 l-25 80 h-15.5 l-14.5-38 -14.5 38 h-15.5 l-25-80 z" fill="#ffffff"/>
+</svg>
