@@ -10,6 +10,7 @@ import Task from '@/models/Task';
 import Doc from '@/models/Doc';
 import McpUsage from '@/models/McpUsage';
 import { generateSvgDiagram } from '@/lib/generateSvg';
+import { isProjectMember, isTaskProjectMember } from '@/lib/rbac';
 
 // CORS headers for hosted AI assistants (they call the connector from their own servers)
 const CORS_HEADERS = {
@@ -115,6 +116,12 @@ function withUsageLimit(user, orgExtractor, handler) {
 
 // ─── Build MCP server with tools ──────────────────────────
 function createMcpServer(user) {
+  // Project, task and doc tools act only inside projects the user is a member
+  // of; to anyone else those ids look like they do not exist.
+  const uid = String(user._id);
+  const denyUnlessMember = async (projectId) =>
+    (await isProjectMember(String(projectId), uid)) ? null : errorResult('Error: Project not found.');
+
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
   const server = new McpServer({
@@ -261,7 +268,10 @@ function boundedResult(rows, cap, hint) {
       async ({ organizationId, limit }) => {
         await dbConnect();
         const cap = limit ?? DEFAULT_ROWS;
-        const projects = await Project.find({ organization: organizationId })
+        const projects = await Project.find({
+          organization: organizationId,
+          $or: [{ createdBy: user._id }, { 'members.user': user._id }],
+        })
           .select('name slug status tags columns createdAt')
           .sort({ createdAt: -1 })
           .limit(cap + 1)
@@ -351,6 +361,8 @@ function boundedResult(rows, cap, hint) {
     },
     { readOnlyHint: true },
     async ({ projectId }) => {
+      const denied = await denyUnlessMember(projectId);
+      if (denied) return denied;
       await dbConnect();
       const project = await Project.findById(projectId)
         .populate('members.user', 'name email')
@@ -401,6 +413,8 @@ function boundedResult(rows, cap, hint) {
     },
     { readOnlyHint: true },
     async ({ projectId, columnId, status, limit }) => {
+      const denied = await denyUnlessMember(projectId);
+      if (denied) return denied;
       await dbConnect();
 
       // Get org from project for usage tracking
@@ -454,6 +468,8 @@ function boundedResult(rows, cap, hint) {
     },
     { readOnlyHint: false },
     async ({ projectId, title, description, priority, columnId, dueDate, labels }) => {
+      const denied = await denyUnlessMember(projectId);
+      if (denied) return denied;
       await dbConnect();
 
       // Get org from project for usage tracking
@@ -508,6 +524,7 @@ function boundedResult(rows, cap, hint) {
     },
     { readOnlyHint: false },
     async ({ taskId, ...updates }) => {
+      if (!(await isTaskProjectMember(String(taskId), uid))) return errorResult('Error: Task not found.');
       await dbConnect();
 
       // Get org from task's project for usage tracking
@@ -561,6 +578,8 @@ function boundedResult(rows, cap, hint) {
     },
     { readOnlyHint: true },
     async ({ projectId, limit }) => {
+      const denied = await denyUnlessMember(projectId);
+      if (denied) return denied;
       await dbConnect();
 
       // Usage tracking
@@ -604,6 +623,8 @@ function boundedResult(rows, cap, hint) {
     },
     { readOnlyHint: false },
     async ({ projectId, title, content, visuals }) => {
+      const denied = await denyUnlessMember(projectId);
+      if (denied) return denied;
       await dbConnect();
 
       const proj = await Project.findById(projectId).select('organization').lean();
@@ -669,6 +690,9 @@ function boundedResult(rows, cap, hint) {
     },
     { readOnlyHint: false },
     async ({ docId, title, content, addVisuals }) => {
+      await dbConnect();
+      const docProject = /^[0-9a-fA-F]{24}$/.test(String(docId)) ? await Doc.findById(docId).select('project').lean() : null;
+      if (!docProject || !(await isProjectMember(String(docProject.project), uid))) return errorResult('Error: Doc not found.');
       await dbConnect();
 
       const existingDoc = await Doc.findById(docId).select('project content').lean();

@@ -76,7 +76,7 @@ export async function DELETE(req, { params }) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { id } = params;
+    const { id } = await params;
     await dbConnect();
 
     const project = await Project.findOne({

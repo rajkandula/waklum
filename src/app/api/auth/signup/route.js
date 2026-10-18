@@ -64,9 +64,12 @@ export async function POST(req) {
           user.organizations.push(org._id);
           joinedOrg = org;
 
-          // Auto-add to project if invite has projectId
-          if (invite.projectId) {
-            const project = await Project.findById(invite.projectId);
+          // Auto-add to every project the invite names (projectIds; older invites: projectId)
+          const inviteProjectIds = [...(invite.projectIds || []), ...(invite.projectId ? [invite.projectId] : [])]
+            .map(String)
+            .filter((id, i, all) => all.indexOf(id) === i);
+          for (const inviteProjectId of inviteProjectIds) {
+            const project = await Project.findOne({ _id: inviteProjectId, organization: org._id });
             if (project) {
               const isProjectMember = project.members.some(m => m.user.toString() === user._id.toString());
               if (!isProjectMember) {
@@ -77,7 +80,7 @@ export async function POST(req) {
                   joinedAt: new Date(),
                 });
                 await project.save();
-                joinedProjectId = project._id;
+                joinedProjectId = joinedProjectId || project._id;
 
                 // Send notification
                 await createNotification({

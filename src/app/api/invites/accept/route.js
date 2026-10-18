@@ -3,7 +3,7 @@ import dbConnect from '@/lib/db';
 import Organization from '@/models/Organization';
 import User from '@/models/User';
 import Project from '@/models/Project';
-import { signToken, setAuthCookie } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { createNotification } from '@/lib/notifications';
 
 export async function POST(req) {
@@ -38,6 +38,11 @@ export async function POST(req) {
       return NextResponse.json({ error: 'This invite has expired' }, { status: 410 });
     }
 
+    // The invite may name several projects (projectIds) or, in older invites, one (projectId).
+    const inviteProjectIds = [...(invite.projectIds || []), ...(invite.projectId ? [invite.projectId] : [])]
+      .map(String)
+      .filter((id, i, all) => all.indexOf(id) === i);
+
     // Check if user exists with this email
     const user = await User.findOne({ email: invite.email });
 
@@ -49,10 +54,21 @@ export async function POST(req) {
           email: invite.email,
           role: invite.role,
           orgName: org.name,
-          projectId: invite.projectId || null,
+          projectId: inviteProjectIds[0] || null,
           token,
         }
       });
+    }
+
+    // An invite link never signs anyone in. The invited account must already
+    // be signed in; anyone else is asked to sign in as that account first.
+    const session = await getSession();
+    if (!session || session.userId !== user._id.toString()) {
+      return NextResponse.json({
+        needsLogin: true,
+        email: invite.email,
+        error: `Sign in as ${invite.email} to accept this invite.`,
+      }, { status: 401 });
     }
 
     // User exists — add them to the org
@@ -74,12 +90,12 @@ export async function POST(req) {
       }
     }
 
-    // ─── AUTO-ADD TO PROJECT if invite has projectId ───
+    // ─── AUTO-ADD TO EVERY PROJECT THE INVITE NAMES ───
     let projectName = null;
-    if (invite.projectId) {
-      const project = await Project.findById(invite.projectId);
+    for (const projectId of inviteProjectIds) {
+      const project = await Project.findOne({ _id: projectId, organization: org._id });
       if (project) {
-        projectName = project.name;
+        projectName = projectName || project.name;
         const isProjectMember = project.members.some(m => m.user.toString() === user._id.toString());
         if (!isProjectMember) {
           project.members.push({
@@ -108,16 +124,12 @@ export async function POST(req) {
     org.pendingInvites = org.pendingInvites.filter(i => i.token !== token);
     await org.save();
 
-    // Auto-login the user
-    const jwtToken = await signToken({ userId: user._id.toString(), email: user.email });
-    await setAuthCookie(jwtToken);
-
     return NextResponse.json({
       success: true,
       orgName: org.name,
       orgId: org._id,
       projectName,
-      projectId: invite.projectId || null,
+      projectId: inviteProjectIds[0] || null,
     });
   } catch (error) {
     console.error('Accept invite error:', error);
@@ -155,8 +167,9 @@ export async function GET(req) {
 
     // If invite has a project, include project name
     let projectName = null;
-    if (invite.projectId) {
-      const project = await Project.findById(invite.projectId).select('name');
+    const firstProjectId = (invite.projectIds && invite.projectIds[0]) || invite.projectId;
+    if (firstProjectId) {
+      const project = await Project.findById(firstProjectId).select('name');
       projectName = project?.name || null;
     }
 
@@ -167,7 +180,7 @@ export async function GET(req) {
       inviterName: inviter?.name || 'A teammate',
       expiresAt: invite.expiresAt,
       projectName,
-      projectId: invite.projectId || null,
+      projectId: firstProjectId || null,
     });
   } catch (error) {
     console.error('Get invite error:', error);

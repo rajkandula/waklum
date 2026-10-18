@@ -12,6 +12,10 @@ import ChatConversation from '@/models/ChatConversation';
 import ChatMemory from '@/models/ChatMemory';
 import { getSession } from '@/lib/auth';
 import { createNotification } from '@/lib/notifications';
+import { isProjectMember, isTaskProjectMember } from '@/lib/rbac';
+
+// Escapes text so it is matched literally inside a RegExp.
+const escapeRe = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const COMPRESS_THRESHOLD = 40; // Compress when messages exceed this
 const KEEP_RECENT = 15; // Keep this many recent messages after compression
@@ -431,6 +435,7 @@ Extract at most 10 key facts. Be specific, not vague.`,
             projectId: z.string().describe('The project ID'),
           }),
           execute: async ({ projectId }) => {
+            if (!(await isProjectMember(String(projectId), String(session.userId)))) return { error: 'Project not found' };
             await dbConnect();
             const project = await Project.findById(projectId)
               .populate('members.user', 'name email avatar');
@@ -514,13 +519,14 @@ Extract at most 10 key facts. Be specific, not vague.`,
             assigneeEmail: z.string().optional().describe('Filter by assignee email'),
           }),
           execute: async ({ projectId, columnId, priority, assigneeEmail }) => {
+            if (!(await isProjectMember(String(projectId), String(session.userId)))) return { error: 'Project not found' };
             await dbConnect();
             const query = { project: projectId };
             if (columnId) query.columnId = columnId;
             if (priority) query.priority = priority;
 
             if (assigneeEmail) {
-              const assigneeUser = await User.findOne({ email: assigneeEmail });
+              const assigneeUser = await User.findOne({ email: assigneeEmail, organizations: org._id });
               if (assigneeUser) query.assignee = assigneeUser._id;
             }
 
@@ -567,16 +573,17 @@ Extract at most 10 key facts. Be specific, not vague.`,
               // Resolve project — by ID first, then by name within the org
               let project = null;
               if (projectId && projectId !== 'undefined') {
-                project = await Project.findOne({ _id: projectId, organization: org._id });
+                project = await Project.findOne({ _id: projectId, organization: org._id, 'members.user': session.userId });
               }
               if (!project && projectName) {
                 project = await Project.findOne({
                   organization: org._id,
+                  'members.user': session.userId,
                   name: { $regex: new RegExp(`^${projectName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
                 });
               }
               if (!project) {
-                const available = await Project.find({ organization: org._id }).select('name _id').lean();
+                const available = await Project.find({ organization: org._id, 'members.user': session.userId }).select('name _id').lean();
                 const list = available.map(p => `"${p.name}" (id: ${p._id})`).join(', ');
                 return { error: `Project not found. Available projects: ${list || 'None'}` };
               }
@@ -585,9 +592,9 @@ Extract at most 10 key facts. Be specific, not vague.`,
               let assigneeInfo = null;
 
               if (assigneeName) {
-                let user = await User.findOne({ email: assigneeName.toLowerCase() });
+                let user = await User.findOne({ email: assigneeName.toLowerCase(), organizations: org._id });
                 if (!user) {
-                  user = await User.findOne({ name: { $regex: new RegExp(assigneeName, 'i') } });
+                  user = await User.findOne({ name: { $regex: new RegExp(escapeRe(assigneeName), 'i') }, organizations: org._id });
                 }
                 if (user) {
                   assigneeId = user._id;
@@ -647,6 +654,7 @@ Extract at most 10 key facts. Be specific, not vague.`,
             taskId: z.string().describe('The task ID to get details for.'),
           }),
           execute: async ({ taskId }) => {
+            if (!(await isTaskProjectMember(String(taskId), String(session.userId)))) return { error: 'Task not found' };
             await dbConnect();
             const task = await Task.findById(taskId)
               .populate('assignee', 'name email')
@@ -701,6 +709,7 @@ Extract at most 10 key facts. Be specific, not vague.`,
             estimatedHours: z.number().optional(),
           }),
           execute: async ({ taskId, ...updates }) => {
+            if (!(await isTaskProjectMember(String(taskId), String(session.userId)))) return { error: 'Task not found' };
             await dbConnect();
             const cleanUpdates = {};
             Object.entries(updates).forEach(([k, v]) => {
@@ -731,6 +740,7 @@ Extract at most 10 key facts. Be specific, not vague.`,
             newColumnId: z.string().describe('The target column ID (e.g., todo, in-progress, review, done)'),
           }),
           execute: async ({ taskId, newColumnId }) => {
+            if (!(await isTaskProjectMember(String(taskId), String(session.userId)))) return { error: 'Task not found' };
             await dbConnect();
             const task = await Task.findById(taskId)
               .populate('assignee', 'name email')
@@ -789,12 +799,13 @@ Extract at most 10 key facts. Be specific, not vague.`,
             assigneeName: z.string().describe('Name or email of the person to assign.'),
           }),
           execute: async ({ taskId, assigneeName }) => {
+            if (!(await isTaskProjectMember(String(taskId), String(session.userId)))) return { error: 'Task not found' };
             await dbConnect();
 
             // Find the user
-            let user = await User.findOne({ email: assigneeName.toLowerCase() });
+            let user = await User.findOne({ email: assigneeName.toLowerCase(), organizations: org._id });
             if (!user) {
-              user = await User.findOne({ name: { $regex: new RegExp(assigneeName, 'i') } });
+              user = await User.findOne({ name: { $regex: new RegExp(escapeRe(assigneeName), 'i') }, organizations: org._id });
             }
             if (!user) return { error: `Could not find team member "${assigneeName}"` };
 
@@ -836,6 +847,7 @@ Extract at most 10 key facts. Be specific, not vague.`,
             assigneeNames: z.array(z.string()).describe('Names or emails of people to add as additional assignees.'),
           }),
           execute: async ({ taskId, assigneeNames }) => {
+            if (!(await isTaskProjectMember(String(taskId), String(session.userId)))) return { error: 'Task not found' };
             await dbConnect();
 
             const userIds = [];
@@ -843,9 +855,9 @@ Extract at most 10 key facts. Be specific, not vague.`,
             const notFound = [];
 
             for (const name of assigneeNames) {
-              let user = await User.findOne({ email: name.toLowerCase() });
+              let user = await User.findOne({ email: name.toLowerCase(), organizations: org._id });
               if (!user) {
-                user = await User.findOne({ name: { $regex: new RegExp(name, 'i') } });
+                user = await User.findOne({ name: { $regex: new RegExp(escapeRe(name), 'i') }, organizations: org._id });
               }
               if (user) {
                 userIds.push(user._id);
@@ -904,11 +916,12 @@ Extract at most 10 key facts. Be specific, not vague.`,
               await dbConnect();
               let project = null;
               if (projectId && projectId !== 'undefined') {
-                project = await Project.findOne({ _id: projectId, organization: org._id });
+                project = await Project.findOne({ _id: projectId, organization: org._id, 'members.user': session.userId });
               }
               if (!project && projectName) {
                 project = await Project.findOne({
                   organization: org._id,
+                  'members.user': session.userId,
                   name: { $regex: new RegExp(`^${projectName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
                 });
               }
@@ -949,16 +962,17 @@ Extract at most 10 key facts. Be specific, not vague.`,
               await dbConnect();
               let project = null;
               if (projectId && projectId !== 'undefined') {
-                project = await Project.findOne({ _id: projectId, organization: org._id });
+                project = await Project.findOne({ _id: projectId, organization: org._id, 'members.user': session.userId });
               }
               if (!project && projectName) {
                 project = await Project.findOne({
                   organization: org._id,
+                  'members.user': session.userId,
                   name: { $regex: new RegExp(`^${projectName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
                 });
               }
               if (!project) {
-                const available = await Project.find({ organization: org._id }).select('name _id').lean();
+                const available = await Project.find({ organization: org._id, 'members.user': session.userId }).select('name _id').lean();
                 const list = available.map(p => `"${p.name}" (id: ${p._id})`).join(', ');
                 return { error: `Project not found. Available: ${list || 'None'}` };
               }

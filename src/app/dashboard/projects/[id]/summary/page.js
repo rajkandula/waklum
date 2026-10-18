@@ -226,7 +226,7 @@ export default function ProjectSummaryPage({ params }) {
               {project?.description && (
                 <div>
                   <label className="text-xs text-surface-500 uppercase tracking-wider">Description</label>
-                  <p className="text-sm text-surface-300 mt-1 leading-relaxed" dangerouslySetInnerHTML={{ __html: project.description }} />
+                  <p className="text-sm text-surface-300 mt-1 leading-relaxed whitespace-pre-line">{project.description}</p>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">

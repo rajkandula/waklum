@@ -58,6 +58,12 @@ export default function InvitePage({ params }) {
         return;
       }
 
+      if (data.needsLogin) {
+        // The invited account exists: sign in as it, then come back here to accept.
+        router.push(`/login?redirect=${encodeURIComponent(`/invite/${token}`)}`);
+        return;
+      }
+
       if (!res.ok) {
         setStatus('error');
         setErrorMsg(data.error);

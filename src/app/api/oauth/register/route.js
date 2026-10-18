@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import { withDb } from '@/lib/db';
 import OAuthClient from '@/models/OAuthClient';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 // POST /api/oauth/register
 // RFC 7591 — Dynamic Client Registration
 // Claude calls this to register itself as an OAuth client and receive a client_id.
+// Open by design, so it is limited per IP (10 registrations an hour).
 export async function POST(request) {
+  const limited = await enforceRateLimit(request, { bucket: 'oauth-register', limit: 10, windowSeconds: 3600 });
+  if (limited) return limited;
+
   let body;
   try {
     body = await request.json();

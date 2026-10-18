@@ -509,29 +509,28 @@ In place:
 - **Build and runtime**: the Docker image builds without secrets and runs as a non-root
   user; `.env*` files are git-ignored.
 
+Fixed before publishing (2026-10-18):
+
+- Every project-scoped route (project tasks, a task and its comments and activity, project
+  docs) checks project membership (`isProjectMember` / `isTaskProjectMember` in
+  `src/lib/rbac.js`); a non-member gets the same 404 as an unknown id. `POST /api/projects`
+  checks that the caller owns or is an active, non-guest member of the workspace.
+- Connector tools and the in-app assistant act only on projects, tasks and docs the user is a
+  member of; `list_projects` lists only the caller's projects; assignees are looked up inside
+  the workspace, with names matched literally.
+- Search shows only people who share a workspace with the caller, and the query is escaped.
+- Invite links never sign anyone in: an existing account must already be signed in as the
+  invited email. Invites add people to every project in `projectIds` (and the older
+  `projectId`), from the email link and from sign-up.
+- The login page follows only same-site paths after sign-in.
+- The project summary shows the description as text, not HTML.
+- `/api/oauth/register` is limited to 10 registrations per IP per hour.
+
 Known gaps in this code:
 
-- **Authorization is uneven.** These routes check only that the caller is signed in, not that
-  they belong to the project: `GET/POST /api/projects/[id]/tasks`, `GET /api/tasks/[id]`,
-  `GET/POST /api/tasks/[id]/comments`, `GET /api/tasks/[id]/activity`, and every
-  `/api/projects/[id]/docs` route. `POST /api/projects` does not check that the caller belongs
-  to the workspace it names. The membership check used by uploads (`isProjectMember` in
-  `src/lib/rbac.js`) is the pattern to apply.
-- **Connector and assistant scope.** Connector tools check workspace membership, not project
-  membership. Several assistant tools (`getProjectDetails`, `getTaskDetails`, `updateTask`,
-  `updateTaskStatus`, `assignTask`, `addAssignees`) act on any id they are given, and the
-  assistant finds assignees by name or email among all users, not only the workspace.
-- **Search** returns name, email and username for any user who matches, not only teammates.
-- **Invite links sign people in.** Accepting `/invite/<token>` for an existing account signs
-  that account in, so the token works as a sign-in link until used or 7 days pass.
-- **Sign-in redirect.** The login page follows its `redirect` parameter without checking that
-  it stays on this site.
 - **Connector tokens never expire.** `ApiKey.expiresAt` is never set or checked, OAuth keys do
   not count toward the 5-key cap, and there is no screen to list or revoke keys (only
   `/api/keys`).
-- **Client registration is open**: `/api/oauth/register` needs no authentication and is not
-  rate limited (the consent page warns that names are self-chosen).
-- **Project summary** renders the project description as HTML.
 - **Tokens at rest**: password-reset tokens, invite tokens and OAuth codes are stored as
   issued, not hashed. They are short-lived.
 - **No session revocation**: a JWT stays valid for its 7 days after logout or a password reset.
@@ -541,9 +540,6 @@ Known gaps in this code:
 - **Dragging as an assignee**: the board sends `order` with the new column, and `order` is
   not among the fields an assignee may change, so an assignee who is not the creator or a
   project owner/admin gets a 403 when moving their card.
-- **Invite links and projects**: the email-link flow (`/api/invites/accept` and sign-up) reads
-  a `projectId` field that invites do not store (they store `projectIds`), so people who join
-  that way are added to the workspace but not to the project. The in-app accept adds them.
 
 ## How it scales
 

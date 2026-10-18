@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import Project from '@/models/Project';
+import Organization from '@/models/Organization';
 import { getSession } from '@/lib/auth';
 
 export async function GET(req) {
@@ -46,6 +48,17 @@ export async function POST(req) {
     if (!organizationId) {
       return NextResponse.json({ error: 'Organization ID is required' }, { status: 400 });
     }
+
+    // Only the workspace owner or an active member who is not a guest may
+    // create a project in it.
+    const canCreate = mongoose.isObjectIdOrHexString(organizationId) && await Organization.exists({
+      _id: organizationId,
+      $or: [
+        { owner: session.userId },
+        { members: { $elemMatch: { user: session.userId, status: 'active', role: { $ne: 'guest' } } } },
+      ],
+    });
+    if (!canCreate) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
 
     const project = await Project.create({
       name,

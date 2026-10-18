@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Doc from '@/models/Doc';
 import { getSession } from '@/lib/auth';
+import { isProjectMember } from '@/lib/rbac';
 
 // GET — list all docs for a project
 export async function GET(req, { params }) {
@@ -10,6 +11,9 @@ export async function GET(req, { params }) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id: projectId } = await params;
+    if (!(await isProjectMember(projectId, session.userId))) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
     await dbConnect();
 
     const docs = await Doc.find({ project: projectId })
@@ -31,6 +35,9 @@ export async function POST(req, { params }) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id: projectId } = await params;
+    if (!(await isProjectMember(projectId, session.userId))) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
     const { title, content } = await req.json();
 
     await dbConnect();

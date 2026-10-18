@@ -6,6 +6,7 @@ import Project from '@/models/Project';
 import Organization from '@/models/Organization';
 import Activity from '@/models/Activity';
 import { getSession } from '@/lib/auth';
+import { isTaskProjectMember } from '@/lib/rbac';
 import { createNotification } from '@/lib/notifications';
 import { sendTaskAssignmentEmail } from '@/lib/email';
 
@@ -15,6 +16,9 @@ export async function GET(req, { params }) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
+    if (!(await isTaskProjectMember(id, session.userId))) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
     await dbConnect();
 
     const task = await Task.findById(id)
@@ -42,6 +46,9 @@ export async function PUT(req, { params }) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
+    if (!(await isTaskProjectMember(id, session.userId))) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
     await dbConnect();
     
     const updates = await req.json();
@@ -252,6 +259,9 @@ export async function DELETE(req, { params }) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
+    if (!(await isTaskProjectMember(id, session.userId))) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
     await dbConnect();
 
     const task = await Task.findById(id);

@@ -16,7 +16,9 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get('redirect');
+  // Only same-site paths ('/x', not '//host' or '/\\host') are followed after sign-in.
+  const requested = searchParams.get('redirect');
+  const redirectUrl = requested && /^\/(?![\/\\])/.test(requested) ? requested : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();

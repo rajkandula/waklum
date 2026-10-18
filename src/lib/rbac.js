@@ -4,6 +4,7 @@ import { getSession } from './auth';
 import dbConnect from './db';
 import Organization from '@/models/Organization';
 import Project from '@/models/Project';
+import Task from '@/models/Task';
 import { hasPermission } from './permissions';
 
 /**
@@ -18,6 +19,20 @@ export async function isProjectMember(projectId, userId) {
   }
   await dbConnect();
   return !!(await Project.exists({ _id: projectId, 'members.user': userId }));
+}
+
+/**
+ * True when the task exists and the user is a member of its project. Task
+ * routes call it before anything else, so a non-member gets the same 404 as
+ * a task that does not exist.
+ */
+export async function isTaskProjectMember(taskId, userId) {
+  if (!userId || typeof taskId !== 'string' || !mongoose.isObjectIdOrHexString(taskId)) {
+    return false;
+  }
+  await dbConnect();
+  const task = await Task.findById(taskId).select('project').lean();
+  return !!task && isProjectMember(String(task.project), userId);
 }
 
 /**

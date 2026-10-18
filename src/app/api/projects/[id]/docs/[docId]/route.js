@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Doc from '@/models/Doc';
 import { getSession } from '@/lib/auth';
+import { isProjectMember } from '@/lib/rbac';
 
 // GET — single doc
 export async function GET(req, { params }) {
@@ -9,10 +10,13 @@ export async function GET(req, { params }) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { docId } = await params;
+    const { id: projectId, docId } = await params;
+    if (!(await isProjectMember(projectId, session.userId))) {
+      return NextResponse.json({ error: 'Doc not found' }, { status: 404 });
+    }
     await dbConnect();
 
-    const doc = await Doc.findById(docId)
+    const doc = await Doc.findOne({ _id: docId, project: projectId })
       .populate('createdBy', 'name email avatar')
       .populate('lastEditedBy', 'name');
 
@@ -30,13 +34,16 @@ export async function PUT(req, { params }) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { docId } = await params;
+    const { id: projectId, docId } = await params;
+    if (!(await isProjectMember(projectId, session.userId))) {
+      return NextResponse.json({ error: 'Doc not found' }, { status: 404 });
+    }
     const updates = await req.json();
 
     await dbConnect();
 
-    const doc = await Doc.findByIdAndUpdate(
-      docId,
+    const doc = await Doc.findOneAndUpdate(
+      { _id: docId, project: projectId },
       { 
         $set: { 
           ...updates, 
@@ -62,10 +69,13 @@ export async function DELETE(req, { params }) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { docId } = await params;
+    const { id: projectId, docId } = await params;
+    if (!(await isProjectMember(projectId, session.userId))) {
+      return NextResponse.json({ error: 'Doc not found' }, { status: 404 });
+    }
     await dbConnect();
 
-    await Doc.findByIdAndDelete(docId);
+    await Doc.findOneAndDelete({ _id: docId, project: projectId });
 
     return NextResponse.json({ success: true });
   } catch (error) {

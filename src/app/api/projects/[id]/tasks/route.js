@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import Task from '@/models/Task';
 import Comment from '@/models/Comment';
 import { getSession } from '@/lib/auth';
+import { isProjectMember } from '@/lib/rbac';
 import { createNotification } from '@/lib/notifications';
 import User from '@/models/User';
 
@@ -12,6 +13,9 @@ export async function GET(req, { params }) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
+    if (!(await isProjectMember(id, session.userId))) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
 
     await dbConnect();
     const tasks = await Task.find({ project: id })
@@ -47,6 +51,9 @@ export async function POST(req, { params }) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
+    if (!(await isProjectMember(id, session.userId))) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
     await dbConnect();
     
     const body = await req.json();

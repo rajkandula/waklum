@@ -21,7 +21,8 @@ export async function GET(req) {
 
     await dbConnect();
 
-    const searchRegex = new RegExp(q, 'i');
+    // Escaped so the query is matched literally, never run as a pattern.
+    const searchRegex = new RegExp(q.slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
     // Search projects the user has access to
     const projects = await Project.find({
@@ -55,8 +56,11 @@ export async function GET(req) {
       .limit(8)
       .lean();
 
-    // Search members (users in same orgs)
+    // Search members (users in same orgs) — only people who share a workspace
+    // with the caller, never every account.
+    const me = await User.findById(session.userId).select('organizations').lean();
     const members = await User.find({
+      organizations: { $in: me?.organizations || [] },
       $or: [
         { name: searchRegex },
         { email: searchRegex },
